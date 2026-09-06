@@ -1,0 +1,41 @@
+name: Stamp checkpoint
+
+# Disparado por Adriana.Api (LedgerCheckpointService) via la API de GitHub cuando publica un
+# checkpoint semanal nuevo. Sella checkpoints/<fecha>/checkpoint.json con OpenTimestamps usando el
+# CLI oficial en Python -- no hay libreria .NET para el protocolo, y el hosting de produccion (IIS
+# compartido en SmartASP.NET) no puede correr ese CLI, por eso el sellado ocurre aqui.
+
+on:
+  workflow_dispatch:
+    inputs:
+      checkpoint_path:
+        description: "Ruta al checkpoint.json a sellar, ej. checkpoints/2026-09-05/checkpoint.json"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  stamp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Instalar opentimestamps-client
+        run: pip install opentimestamps-client
+
+      - name: Sellar checkpoint con OpenTimestamps
+        run: ots stamp "${{ inputs.checkpoint_path }}"
+
+      - name: Commitear el .ots resultante
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "${{ inputs.checkpoint_path }}.ots"
+          git diff --cached --quiet || git commit -m "Sellar ${{ inputs.checkpoint_path }} con OpenTimestamps"
+          git push

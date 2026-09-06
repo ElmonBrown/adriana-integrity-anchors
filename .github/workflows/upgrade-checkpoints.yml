@@ -1,0 +1,42 @@
+name: Upgrade checkpoints
+
+# Corre solo, sin intervencion de Adriana.Api: un sello de OpenTimestamps queda "Pendiente" hasta
+# que el hash entra en un bloque de Bitcoin (horas, no segundos). Este workflow reintenta la
+# actualizacion todos los dias; cuando ya confirmo, el .ots se completa y queda "Confirmado" para
+# siempre -- no requiere que nadie dispare nada.
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Instalar opentimestamps-client
+        run: pip install opentimestamps-client
+
+      - name: Intentar actualizar cada .ots pendiente
+        run: |
+          find checkpoints -name '*.ots' -print0 | while IFS= read -r -d '' file; do
+            echo "Actualizando $file"
+            ots upgrade "$file" || echo "Aun no confirmado en Bitcoin: $file"
+          done
+
+      - name: Commitear los que ya confirmaron
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add checkpoints
+          git diff --cached --quiet || git commit -m "Actualizar confirmaciones de OpenTimestamps"
+          git push
